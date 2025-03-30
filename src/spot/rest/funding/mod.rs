@@ -1,6 +1,5 @@
-use crate::utils::{sign, APIKey, APISecret, Payload};
-
-use super::SpotRequest;
+use crate::{KrakenRequest, APIKey, APISecret};
+use crate::spot::rest::{Payload, sign};
 
 #[derive(serde::Deserialize, Clone)]
 #[serde(untagged)]
@@ -21,7 +20,7 @@ pub struct DepositMethod {
     pub minimum: String
 }
 
-pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str, asset_class: Option<&str>) -> SpotRequest<Vec<DepositMethod>> { //Todo: model asset and asset_class as types
+pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str, asset_class: Option<&str>) -> KrakenRequest<Vec<DepositMethod>> { //Todo: model asset and asset_class as types
     #[derive(serde::Serialize)]
     struct Parameters<'a> {
         nonce: i64,
@@ -46,7 +45,7 @@ pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str
             .header("API-Sign", sign(secret,path.clone(),&params).to_string())
             .uri(uri)
             .body(serde_json::to_string(&params).unwrap()).unwrap();
-    SpotRequest::new(request)
+    KrakenRequest::new(request)
 }
 
 #[cfg(test)]
