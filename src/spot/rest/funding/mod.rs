@@ -1,23 +1,23 @@
 use crate::{KrakenRequest, APIKey, APISecret};
 use crate::spot::rest::{Payload, sign};
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum BoolUnion<T> {
     Bool(bool),
     Data(T)
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Debug)]
 pub struct DepositMethod {
-    pub method: String,
-    pub limit: BoolUnion<u64>, //is either a number or false so we need this wrapper type or a custom deserializer and honestly im too lazy for that 
+    pub method: Option<String>,
+    pub limit: Option<BoolUnion<u64>>, //is either a number or false so we need this wrapper type or a custom deserializer and honestly im too lazy for that 
     #[serde(rename = "address-setup-fee")]
-    pub address_setup_fee: String,
-    pub fee: String,
+    pub address_setup_fee: Option<String>,
+    pub fee: Option<String>,
     #[serde(rename = "gen-address")]
-    pub gen_address: String,
-    pub minimum: String
+    pub gen_address: Option<bool>,
+    pub minimum: Option<String>
 }
 
 pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str, asset_class: Option<&str>) -> KrakenRequest<Vec<DepositMethod>> { //Todo: model asset and asset_class as types
@@ -25,6 +25,7 @@ pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str
     struct Parameters<'a> {
         nonce: i64,
         asset: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
         aclass: Option<&'a str>
     }
     impl<'a> Payload for Parameters<'a> {
@@ -41,6 +42,8 @@ pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str
     let path = uri.path_and_query().unwrap();
     let request = http::request::Builder::new()
             .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
             .header("API-Key", key.to_string())
             .header("API-Sign", sign(secret,path.clone(),&params).to_string())
             .uri(uri)

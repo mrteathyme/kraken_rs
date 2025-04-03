@@ -1,6 +1,7 @@
 pub mod rest;
 pub mod websocket;
 
+/*
 pub struct SpotRequest<Response: for<'a> serde::Deserialize<'a>>(http::Request<String>,std::marker::PhantomData<Response>);
 
 #[derive(serde::Deserialize)]
@@ -25,3 +26,4 @@ impl<Response: for<'a> serde::Deserialize<'a>> SpotRequest<Response> {
         }
     }
 }
+*/

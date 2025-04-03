@@ -18,7 +18,7 @@ impl std::ops::Deref for APISignature {
 #[derive(Copy, Clone)]
 pub struct APISecret<'a>(&'a str);
 impl<'a> APISecret<'a> {
-    pub fn new(secret: &'a str) -> Self {
+    pub const fn new(secret: &'a str) -> Self {
         APISecret(secret)
     }
 }
@@ -39,16 +39,16 @@ impl std::ops::Deref for APIKey<'_> {
     }
 }
 impl<'a> APIKey<'a> {
-    pub fn new(key: &'a str) -> Self {
+    pub const fn new(key: &'a str) -> Self {
         APIKey(key)
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 #[serde(untagged)]
 pub enum KrakenResponse<T> {
     Spot {
-        response: Option<T>, 
+        result: Option<T>, 
         error: Option<serde_json::Value>
     },
     Futures {
@@ -68,7 +68,7 @@ pub enum KrakenResponse<T> {
 
 pub struct KrakenRequest<Response: for<'a> serde::Deserialize<'a>>(http::Request<String>,std::marker::PhantomData<Response>);
 
-impl<Response: for<'a> serde::Deserialize<'a>> KrakenRequest<Response> {
+impl<Response: for<'a> serde::Deserialize<'a> + std::fmt::Debug> KrakenRequest<Response> {
     fn new(request: http::Request<String>) -> Self {
         KrakenRequest(request,std::marker::PhantomData)
     }
@@ -77,9 +77,8 @@ impl<Response: for<'a> serde::Deserialize<'a>> KrakenRequest<Response> {
         R: std::future::Future<Output = Result<bytes::Bytes, E>>,
         Box<dyn std::error::Error>: From<E>
     {
-        let response: KrakenResponse<Response> = serde_json::from_slice(&func(self.0).await?)?;
-        match response {
-            KrakenResponse::Spot {response, error} => match response {
+        match serde_json::from_slice(&func(self.0).await?)? {
+            KrakenResponse::Spot {result, error} => match result {
                 Some(data) => Ok(data),
                 None => Err(error.unwrap().to_string().into())
             },
