@@ -1,3 +1,5 @@
+use spot::rest::{sign, Payload};
+
 pub mod spot;
 pub mod derivatives;
 pub mod utils;
@@ -72,6 +74,27 @@ impl<Response: for<'a> serde::Deserialize<'a> + std::fmt::Debug> KrakenRequest<R
     fn new(request: http::Request<String>) -> Self {
         KrakenRequest(request,std::marker::PhantomData)
     }
+    fn new_spot<Params>(
+        method: http::Method,
+        params: &Params,
+        uri: &http::Uri,
+        key: &APIKey,
+        secret: &APISecret,
+    ) -> Self
+    where
+        Params: serde::Serialize + Payload,
+    {
+        let path = uri.path_and_query().unwrap();
+        Self::new(http::Request::builder()
+        .method(method)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("API-Key", key.to_string())
+        .header("API-Sign", sign(secret,path.clone(),params).to_string())
+        .uri(uri)
+        .body(serde_json::to_string(&params).unwrap()).unwrap())
+    }
+
     pub async fn send<F, R, E>(self, func: F) -> Result<Response, Box<dyn std::error::Error>>
     where F: Fn(http::Request<String>) -> R,
         R: std::future::Future<Output = Result<bytes::Bytes, E>>,

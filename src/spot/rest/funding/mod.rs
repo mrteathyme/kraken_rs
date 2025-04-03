@@ -60,32 +60,8 @@ pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: KrakenWit
         max_fee
     };
     let uri = http::uri::Uri::from_static("https://api.kraken.com/0/private/Withdraw");
-    let path = uri.path_and_query().unwrap();
-    let request = http::request::Builder::new()
-            .method("POST")
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .header("API-Key", key.to_string())
-            .header("API-Sign", sign(secret,path.clone(),&params).to_string())
-            .uri(uri)
-            .body(serde_json::to_string(&params).unwrap()).unwrap();
-    KrakenRequest::new(request)
+    KrakenRequest::new_spot(http::Method::POST,&params,&uri,key,&secret)
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct DepositMethod {
@@ -118,16 +94,7 @@ pub fn deposit_methods(key: &APIKey, secret: &APISecret, nonce: i64, asset: &str
         aclass: asset_class
     };
     let uri = http::uri::Uri::from_static("https://api.kraken.com/0/private/DepositMethods");
-    let path = uri.path_and_query().unwrap();
-    let request = http::request::Builder::new()
-            .method("POST")
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .header("API-Key", key.to_string())
-            .header("API-Sign", sign(secret,path.clone(),&params).to_string())
-            .uri(uri)
-            .body(serde_json::to_string(&params).unwrap()).unwrap();
-    KrakenRequest::new(request)
+    KrakenRequest::new_spot(http::Method::POST,&params,&uri,key,&secret)
 }
 
 #[cfg(test)]
