@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+use std::ops::Deref;
+
 use serde::Serialize;
 use serde_with::{serde_as, DisplayFromStr};
 
 use crate::{KrakenRequest, APIKey, APISecret};
-use crate::spot::rest::{Payload, sign};
+use crate::spot::rest::Payload;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -11,10 +14,97 @@ pub enum BoolUnion<T> {
     Data(T)
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
-pub struct ReferenceID {
-    pub refid: String 
+#[derive(serde::Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ReferenceID(pub String);
+
+impl Deref for ReferenceID {
+    type Target = String;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
+
+#[serde_as]
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct Withdrawal {
+    pub method: String,
+    pub asset: String,
+    pub network: String,
+    pub aclass: String,
+    pub refid: ReferenceID,
+    pub txid: String,
+    #[serde_as(as = "DisplayFromStr")]
+    pub amount: f64,
+    #[serde_as(as = "DisplayFromStr")]
+    pub fee: f64,
+    pub time: u64,
+    pub status: String,
+    pub key: String,
+}
+
+
+#[derive(Clone, Debug)]
+pub struct Withdrawals(pub HashMap<ReferenceID, Withdrawal>);
+impl Deref for Withdrawals {
+    type Target = HashMap<ReferenceID, Withdrawal>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Withdrawals {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let data = Vec::<Withdrawal>::deserialize(deserializer)?;
+        let mut withdrawals_map = HashMap::new();
+        for withdrawal in data {
+            let refid = withdrawal.refid.clone();
+            withdrawals_map.insert(refid, withdrawal);
+        }
+        Ok(Withdrawals(withdrawals_map))
+    }
+}
+
+pub fn withdraw_status(key: &APIKey, secret: &APISecret, nonce: i64, asset: Option<&str>, aclass: Option<&str>, method: Option<&str>, start: Option<u64>, end: Option<u64>) -> KrakenRequest<Withdrawals> { //Todo: model asset and asset_class as types
+    #[serde_as]
+    #[derive(serde::Serialize)]
+    struct Parameters<'a> {
+        nonce: i64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        asset: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        aclass: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        method: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde_as(as = "Option<DisplayFromStr>")]
+        start: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde_as(as = "Option<DisplayFromStr>")]
+        end: Option<u64>,
+    }
+    impl<'a> Payload for Parameters<'a> {
+        fn nonce(&self) -> i64 {
+            self.nonce
+        }
+    }
+    let params = Parameters {
+        nonce,
+        aclass,
+        asset,
+        method,
+        start,
+        end
+    };
+    let uri = http::uri::Uri::from_static("https://api.kraken.com/0/private/WithdrawStatus");
+    KrakenRequest::new_spot(http::Method::POST,&params,&uri,key,&secret)
+}
+
+
+
+
 
 //ToDo: Move this to lib for easier importing (or maybe a prelude or reexport?)
 //ToDo: Implement sanity check by changing address to a network enum that checks for malformed
@@ -35,7 +125,12 @@ impl<'a> KrakenWithdrawalAddress<'a> {
     }
 }
 
-pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: KrakenWithdrawalAddress, amount: f64, max_fee: Option<f64>) -> KrakenRequest<ReferenceID> { //Todo: model asset and asset_class as types
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct WithdrawResponse {
+    pub refid: ReferenceID,
+}
+
+pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: KrakenWithdrawalAddress, amount: f64, max_fee: Option<f64>) -> KrakenRequest<WithdrawResponse> { //Todo: model asset and asset_class as types
     #[serde_as]
     #[derive(serde::Serialize)]
     struct Parameters<'a> {

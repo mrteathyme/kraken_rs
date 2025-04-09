@@ -100,15 +100,19 @@ impl<Response: for<'a> serde::Deserialize<'a> + std::fmt::Debug> KrakenRequest<R
         R: std::future::Future<Output = Result<bytes::Bytes, E>>,
         Box<dyn std::error::Error>: From<E>
     {
-        match serde_json::from_slice(&func(self.0).await?)? {
-            KrakenResponse::Spot {result, error} => match result {
+        let res = func(self.0).await?;
+        match serde_json::from_slice(&res) {
+            Ok(KrakenResponse::Spot {result, error}) => match result {
                 Some(data) => Ok(data),
                 None => Err(error.unwrap().to_string().into())
             },
-            KrakenResponse::Futures {data, ..} => {
+            Ok(KrakenResponse::Futures {data, ..}) => {
                 Ok(data)
             }
-            KrakenResponse::FuturesError {errors,..} => Err(format!("{:?}",errors).into()) //ToDo: Better error handling
+            Ok(KrakenResponse::FuturesError {errors,..}) => Err(format!("{:?}",errors).into()), //ToDo: Better error handling
+            Err(e) => {
+                Err(format!("Error parsing response: {}\n Raw: {}", e, String::from_utf8_lossy(&res)).into())
+            }
         }
     }
 }
