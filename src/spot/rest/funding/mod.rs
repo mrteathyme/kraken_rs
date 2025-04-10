@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 
 use crate::{KrakenRequest, APIKey, APISecret};
@@ -12,6 +12,92 @@ use crate::spot::rest::Payload;
 pub enum BoolUnion<T> {
     Bool(bool),
     Data(T)
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct DepositStatus {
+    status: String,
+    #[serde(rename = "status-props")]
+    props: Option<String>
+}
+
+#[serde_as]
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct Deposit {
+    pub method: String,
+    pub asset: String,
+    pub aclass: String,
+    pub refid: ReferenceID,
+    pub txid: String,
+    pub info: Option<String>,
+    #[serde_as(as = "DisplayFromStr")]
+    pub amount: f64,
+    #[serde_as(as = "DisplayFromStr")]
+    pub fee: f64,
+    pub time: i64,
+    #[serde(flatten)]
+    pub status: DepositStatus,
+    pub originators: Option<Vec<String>>
+}
+
+
+#[derive(Clone, Debug)]
+pub struct Deposits(pub HashMap<ReferenceID, Deposit>);
+impl Deref for Deposits {
+    type Target = HashMap<ReferenceID, Deposit>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Deposits {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let data = Vec::<Deposit>::deserialize(deserializer)?;
+        let mut deposits_map = HashMap::new();
+        for deposit in data {
+            let refid = deposit.refid.clone();
+            deposits_map.insert(refid, deposit);
+        }
+        Ok(Deposits(deposits_map))
+    }
+}
+
+pub fn deposit_status(key: &APIKey, secret: &APISecret, nonce: i64, asset: Option<&str>, aclass: Option<&str>, method: Option<&str>, start: Option<u64>, end: Option<u64>) -> KrakenRequest<Deposits> { //Todo: model asset and asset_class as types
+    #[serde_as]
+    #[derive(serde::Serialize)]
+    struct Parameters<'a> {
+        nonce: i64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        asset: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        aclass: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        method: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde_as(as = "Option<DisplayFromStr>")]
+        start: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde_as(as = "Option<DisplayFromStr>")]
+        end: Option<u64>,
+    }
+    impl<'a> Payload for Parameters<'a> {
+        fn nonce(&self) -> i64 {
+            self.nonce
+        }
+    }
+    let params = Parameters {
+        nonce,
+        aclass,
+        asset,
+        method,
+        start,
+        end
+    };
+    let uri = http::uri::Uri::from_static("https://api.kraken.com/0/private/DepositStatus");
+    KrakenRequest::new_spot(http::Method::POST,&params,&uri,key,&secret)
 }
 
 #[derive(serde::Deserialize, Clone, Debug, Hash, PartialEq, Eq)]
@@ -37,7 +123,7 @@ pub struct Withdrawal {
     pub amount: f64,
     #[serde_as(as = "DisplayFromStr")]
     pub fee: f64,
-    pub time: u64,
+    pub time: i64,
     pub status: String,
     pub key: String,
 }
@@ -112,7 +198,7 @@ pub fn withdraw_status(key: &APIKey, secret: &APISecret, nonce: i64, asset: Opti
 //checking if the asset supports the network would also probably be nice but given the number of
 //assets available might be better to do that at runtime (I believe you can get that information
 //from the api)
-#[derive(Serialize, Clone, Debug)]
+#[derive(Deserialize,Serialize, Clone, Debug, Copy)]
 pub struct KrakenWithdrawalAddress<'a> {
     pub address: &'a str,
     pub key: &'a str,
@@ -130,7 +216,7 @@ pub struct WithdrawResponse {
     pub refid: ReferenceID,
 }
 
-pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: KrakenWithdrawalAddress, amount: f64, max_fee: Option<f64>) -> KrakenRequest<WithdrawResponse> { //Todo: model asset and asset_class as types
+pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: &KrakenWithdrawalAddress, amount: f64, max_fee: Option<f64>) -> KrakenRequest<WithdrawResponse> { //Todo: model asset and asset_class as types
     #[serde_as]
     #[derive(serde::Serialize)]
     struct Parameters<'a> {
@@ -139,7 +225,7 @@ pub fn withdraw(key: &APIKey, secret: &APISecret, nonce: i64, address: KrakenWit
         #[serde_as(as = "Option<DisplayFromStr>")]
         max_fee: Option<f64>,
         #[serde(flatten)]
-        address: KrakenWithdrawalAddress<'a>,
+        address: &'a KrakenWithdrawalAddress<'a>,
         #[serde_as(as = "DisplayFromStr")]
         amount: f64,
     }
